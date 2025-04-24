@@ -33,16 +33,15 @@ This project provides a way to interact with the Gemini API to generate and modi
 1.  Clone this repository:
 
     ```bash
-    git clone <repository_url>
-    cd <repository_name>
+    git clone https://github.com/anshulsawant/gemini-coder
+    cd gemini-coder
     ```
 
 2.  Create a virtual environment (recommended):
 
     ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Linux/macOS
-    venv\Scripts\activate  # On Windows
+    python -m venv gc
+    source gc/bin/activate  # gc\Scripts\activate  # On Windows
     ```
 
 3.  Install the dependencies:
@@ -63,16 +62,10 @@ This project provides a way to interact with the Gemini API to generate and modi
 
 ### Starting the Server
 
-1.  Navigate to the project directory:
+1.  Start the Flask server, providing the project root as a command-line argument:
 
     ```bash
-    cd <repository_name>
-    ```
-
-2.  Start the Flask server, providing the project root as a command-line argument:
-
-    ```bash
-    python app.py /path/to/your/project
+    python -m server /path/to/your/project
     ```
 
     (Replace `/path/to/your/project` with the actual path to the project you want to work with. This should be the directory containing your source code, documentation, etc.)
