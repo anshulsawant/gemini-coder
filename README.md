@@ -1,8 +1,8 @@
 # Gemini Coder
 
-## Description (Provide a brief description of your project)
+## Description
 
-This project provides a way to interact with the Gemini API to generate and modify code and documentation within a software project. It's designed to be used as a background server and provides an API and a Gradio-based user interface.
+This project provides a way to interact with the Gemini API to generate and modify code and documentation within a software project. It runs as a background Flask server providing a REST API, and includes a Gradio-based web UI for interaction.
 
 ## Table of Contents
 
@@ -14,9 +14,10 @@ This project provides a way to interact with the Gemini API to generate and modi
     * [Interacting with the API](#interacting-with-the-api)
         * [Setting the Project Root](#setting-the-project-root)
         * [Generating Content](#generating-content)
-        * [Modifying Content](#modifying-content)
+        * [Modifying Content (Multi-Step)](#modifying-content-multi-step)
         * [Syncing Files](#syncing-files)
-        * [Chatting with the LLM](#chatting-with-the-LLM)
+        * [Chatting with the LLM](#chatting-with-the-llm)
+        * [File Operations](#file-operations)
 * [Configuration](#configuration)
 * [Contributing](#contributing)
 * [License](#license)
@@ -26,146 +27,200 @@ This project provides a way to interact with the Gemini API to generate and modi
 * Python 3.9+
 * pip
 * A Google Cloud account and API key for the Gemini API.
-* A configured editor (e.g., Vim, Emacs, VS Code).
+* A configured command-line editor (e.g., Vim, Emacs, Nano, VS Code `code` command).
 
 ## Installation
 
 1.  Clone this repository:
 
     ```bash
-    git clone https://github.com/anshulsawant/gemini-coder
+    git clone [https://github.com/anshulsawant/gemini-coder](https://github.com/anshulsawant/gemini-coder) # Replace with your repo URL
     cd gemini-coder
     ```
-
 2.  Create a virtual environment (recommended):
 
     ```bash
-    python -m venv gc
-    source gc/bin/activate  # gc\Scripts\activate  # On Windows
+    python -m venv venv
+    source venv/bin/activate  # On Linux/macOS
+    # venv\Scripts\activate   # On Windows
     ```
-
 3.  Install the dependencies:
 
     ```bash
     pip install -r requirements.txt
     ```
-
 4.  Set the `GOOGLE_API_KEY` environment variable:
 
     ```bash
     export GOOGLE_API_KEY="YOUR_API_KEY"  # On Linux/macOS
-    set GOOGLE_API_KEY=YOUR_API_KEY  # On Windows
+    # set GOOGLE_API_KEY=YOUR_API_KEY     # On Windows (Command Prompt)
+    # $env:GOOGLE_API_KEY="YOUR_API_KEY"  # On Windows (PowerShell)
     ```
+
     (Replace `YOUR_API_KEY` with your actual Gemini API key.)
+5.  (Optional) Set the `EDITOR` environment variable if your preferred editor isn't found automatically (defaults: `$VISUAL`, then `emacs`):
+
+    ```bash
+    export EDITOR="code --wait" # Example for VS Code (use --wait flag)
+    ```
 
 ## Usage
 
 ### Starting the Server
 
-1.  Start the Flask server, providing the project root as a command-line argument:
+1.  Start the Flask server:
 
     ```bash
-    python -m server /path/to/your/project
+    python server.py
     ```
 
-    (Replace `/path/to/your/project` with the actual path to the project you want to work with. This should be the directory containing your source code, documentation, etc.)
-
-    The server will start running at `http://0.0.0.0:5000`.
+    The server will start running at `http://0.0.0.0:5000`. Note that the project root is **not** set via the command line anymore; it must be set via the UI or API.
 
 ### Using the Gradio UI
 
-Once the server is running, you can interact with the application using the Gradio web interface:
+Once the server is running, interact with the application via the Gradio web interface:
 
 1.  Open your web browser and go to `http://localhost:5000`.
-2.  The UI provides the following functionality:
-    * **Chat Interface**: You can chat with the LLM by typing messages in the text box and clicking "Send". The conversation history will be displayed above the input box.
-    * **File Explorer**: A list of project files is displayed on the right side.  Select a file from the dropdown to view its contents.
-    * **Generate File**: Enter a desired filename and instructions in the provided text boxes, and click "Generate File".  The new file will be generated and opened in your configured editor.
-    * **Modify File**: Select a file to modify from the dropdown, provide modification instructions, and click "Modify File". The diff will be opened in your configured editor.  After you save the changes in your editor, click "Apply Changes" in the Gradio UI to apply them to the original file.
+2.  **Set Project Root:** Enter the absolute path to your project directory in the "Project Root Directory" field and click "Set Project Root & Load Files". This is required before other actions work.
+3.  The UI provides:
+
+    * **Chat Interface**: Chat with the LLM. History is maintained per project root.
+    * **File Explorer**: Select files from the dropdown (refreshed after setting root) to view their content. Use "Refresh File List" if needed.
+    * **Generate File**: Enter a filename (relative to project root) and instructions, then click "Generate File". The server will generate the file, save it, and attempt to open it in your configured editor.
+    * **Modify File**:
+        1.  Select a file to modify from the dropdown.
+        2.  Provide modification instructions.
+        3.  Click "Request Modification (Show Diff)".
+        4.  The server generates the changes, creates a diff, and attempts to open the diff file in your editor.
+        5.  **Review the diff in your editor.**
+        6.  Back in the Gradio UI, click "✅ Confirm & Apply Changes" to save the modifications to the original file, or "❌ Cancel Changes" to discard them.
 
 ### Interacting with the API
 
-The application provides a REST API for interacting with the Gemini API. You can use tools like `curl`, Postman, or a web browser to send requests.
+The application provides a REST API. Use tools like `curl` or Postman. **Remember to set the project root first via `/set_project_root` for subsequent requests in your session.**
 
 #### Setting the Project Root
 
-The project root is typically set when starting the server from the command line.
+**Required before most other API calls.** Send a POST request to `/set_project_root`:
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+-d '{
+    "project_root": "/path/to/your/project"
+}' \
+http://localhost:5000/set_project_root
+```project_root`: The absolute path to the project directory.
 
 #### Generating Content
 
-To generate a new file, send a POST request to the `/generate` endpoint:
+To generate a new file, send a POST request to `/generate`:
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
 -d '{
-    "filename": "new_file.py",
-    "instructions": "Create a function that adds two numbers."
+    "filename": "new_feature/logic.py",
+    "instructions": "Create a Python class named Calculator with add and subtract methods."
 }' \
-[http://0.0.0.0:5000/generate](http://0.0.0.0:5000/generate)
-```
+http://localhost:5000/generate
+```filename`: The relative path (from project root) of the file to create.  
+`instructions`: Instructions for generating the file's content.  
+(Optional) `"relevant_files": ["path/to/context.py"]`: List of relative paths for context (currently basic implementation).
 
-* `filename`: The name of the file to create.
-* `instructions`: Instructions for generating the file's content.
+The server generates the file, saves it, and tries to open it in the editor configured via `$EDITOR`.
 
-The server will generate the file and open it in your configured editor.
+#### Modifying Content (Multi-Step)
 
-#### Modifying Content
+Modifying is a two-step process via the API:
 
-To modify an existing file, send a POST request to the `/modify` endpoint:
+**Step 1: Request Modification & Diff**
 
-```bash
-curl -X POST -H "Content-Type: application/json" \
--d '{
-    "filepath": "src/my_file.py",
-    "instructions": "Add a comment at the beginning of the file saying \'This file is modified.\'"
-}' \
-[http://0.0.0.0:5000/modify](http://0.0.0.0:5000/modify)
-```
-
-* `filepath`: The path to the file to modify.
-* `instructions`: Instructions for modifying the file's content.
-
-The server will generate a diff of the changes and open it in your configured editor. After you save the changes in the editor, you need to send an apply changes request
+Send a POST request to `/modify`:
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
 -d '{
     "filepath": "src/my_file.py",
-    "modified_content": "The modified content"
+    "instructions": "Add a docstring to the main function."
 }' \
-[http://0.0.0.0:5000/apply_changes](http://0.0.0.0:5000/apply_changes)
-```
+http://localhost:5000/modify
+```filepath`: The relative path to the file to modify.  
+`instructions`: Instructions for modifying the file.
 
-#### Syncing Files
+The server generates the modified content temporarily, creates a diff file, and attempts to open the diff in your editor. The response indicates success and includes the filepath.
 
-To get a summary of the project, send a POST request to the `/sync` endpoint:
+**Step 2: Confirm or Cancel**
 
-```bash
-curl -X POST -H "Content-Type: application/json" \
--d '{}' [http://0.0.0.0:5000/sync](http://0.0.0.0:5000/sync)
-```
-
-The server will return a summary of the project based on the files in the project root.
-
-#### Chatting with the LLM
-
-To send a message to the LLM, send a POST request to the `/chat` endpoint:
+To apply the changes shown in the diff, send a POST request to `/confirm_modify`:
 
 ```bash
 curl -X POST -H "Content-Type: application/json" \
--d '{"message": "What is this project about?"}' [http://0.0.0.0:5000/chat](http://0.0.0.0:5000/chat)
-```
+-d '{
+    "filepath": "src/my_file.py"
+}' \
+http://localhost:5000/confirm_modify
 
-* `message`: The message you want to send to the LLM.
+This writes the temporarily stored modified content to the actual file.
 
-### Configuration
+To discard the changes, send a POST request to /cancel_modify:
 
-The application's behavior can be configured using environment variables:
+curl -X POST -H "Content-Type: application/json" \
+-d '{
+    "filepath": "src/my_file.py"
+}' \
+http://localhost:5000/cancel_modify
 
-* `EDITOR`: The editor to use for opening files (e.g., `vim`, `emacs`, `code`). If not set, the application will try to use `$VISUAL` and defaults to `vim`.
-* `GOOGLE_API_KEY`: Your Google Gemini API key. This is required for the application to function.
+This removes the temporarily stored modification.
 
-### [TODO] Context Caching
+Syncing Files
+To get an LLM-generated summary of the project, send a POST request to /sync:
 
-The Gemini API supports caching of responses to improve efficiency and reduce costs.  See the [Caching documentation](https://ai.google.dev/gemini-api/docs/caching?lang=python) for more information.  You may want to implement caching in your application.
+curl -X POST http://localhost:5000/sync
 
+(No request body needed currently).
+
+The server reads relevant project files (up to limits), sends them to the LLM, and returns a summary.
+
+Chatting with the LLM
+To send a message and get a response, maintaining conversation history for the current project root, send a POST request to /chat:
+
+curl -X POST -H "Content-Type: application/json" \
+-d '{"message": "Explain the purpose of the main function in src/my_file.py"}' \
+http://localhost:5000/chat
+```message`: The message you want to send.
+
+#### File Operations
+
+**Get File List:**
+
+```bash
+curl http://localhost:5000/get_files
+
+Returns a JSON list of relative file paths within the project root.
+
+Get File Content:
+
+curl http://localhost:5000/get_file_content?filepath=src/my_file.py
+
+Returns JSON containing the content of the specified relative file path.
+
+Upload File: (Example using curl)
+
+curl -X POST -F "file=@/path/to/local/file_to_upload.txt" http://localhost:5000/upload_file
+
+Uploads a file to the uploaded_files directory within the project root.
+
+Configuration
+GOOGLE_API_KEY (Required): Your Google Gemini API key (environment variable).
+
+EDITOR / VISUAL (Optional): Command to launch your preferred text editor (environment variable). Ensure it works from your terminal. For GUI editors like VS Code or Sublime, you might need a specific command-line flag (e.g., code --wait, subl -w) to make the server wait until you close the file/diff.
+
+GEMINI_CODER_SERVER_URL (Optional): URL for the backend server if the Gradio UI needs to connect to a different address (defaults to http://localhost:5000).
+
+[TODO] Context Caching
+The Gemini API supports caching. Implementing client-side caching in server.py could improve performance and reduce costs for repeated requests. See the Gemini Caching documentation.
+
+Contributing
+Contributions are welcome! Please open an issue or submit a pull request.
+
+License
+(Choose and add a license, e.g., MIT, Apache 2.0
